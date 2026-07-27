@@ -1,23 +1,26 @@
 services:
-  ollama:
+  llm:
     image: ollama/ollama:latest
+    container_name: llm
+    working_dir: /app
     ports:
       - "11434:11434"
     volumes:
+      - .:/app
       - ollama_storage:/root/.ollama
 
   web:
     image: python:3.11-slim
     working_dir: /app
-    command: python secure_gateway.py
+    command: python lab/scripts/secure_gateway.py
     ports:
       - "5000:5000"
     volumes:
       - .:/app
     environment:
-      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_HOST: http://llm:11434
     depends_on:
-      - ollama
+      - llm
 
 volumes:
   ollama_storage:
