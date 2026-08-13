@@ -107,6 +107,13 @@ def log_event(event):
         pass  # non-fatal if the log file can't be written (e.g. read-only mount)
 
 
+def _normalize_generation_response(generation):
+    """Support both dict-style and pydantic/model-style Ollama responses."""
+    if isinstance(generation, dict):
+        return generation.get("response"), generation.get("thinking")
+    return getattr(generation, "response", None), getattr(generation, "thinking", None)
+
+
 def run_gateway(model, prompt, gateway_enabled):
     """
     Runs one prompt through the pipeline and returns a result dict.
@@ -139,7 +146,19 @@ def run_gateway(model, prompt, gateway_enabled):
             }
 
     try:
-        raw_response = client.generate(model=model, prompt=prompt)["response"]
+        try:
+            generation = client.generate(model=model, prompt=prompt, think=True)
+        except TypeError:
+            generation = client.generate(model=model, prompt=prompt)
+        except Exception as exc:
+            message = str(exc).lower()
+            if "does not support thinking" in message or (
+                "thinking" in message and "400" in message
+            ):
+                generation = client.generate(model=model, prompt=prompt)
+            else:
+                raise
+        raw_response, thinking = _normalize_generation_response(generation)
     except Exception as e:
         event["verdict"] = "ERROR"
         event["detail"] = str(e)
@@ -148,6 +167,7 @@ def run_gateway(model, prompt, gateway_enabled):
             "verdict": "error",
             "message": f"\u26a0\ufe0f Could not reach model '{model}': {e}",
             "response": None,
+            "thinking": None,
         }
 
     if gateway_enabled:
@@ -173,6 +193,7 @@ def run_gateway(model, prompt, gateway_enabled):
         "verdict": "allowed",
         "message": None,
         "response": raw_response,
+        "thinking": thinking,
     }
 
 
@@ -203,6 +224,9 @@ PAGE = """
   .examples a { display:inline-block; font-size:.8rem; color:#58a6ff; text-decoration:none; margin:0 .5rem .5rem 0; border:1px solid #30363d; padding:.25rem .6rem; border-radius:12px; }
   .examples a:hover { background:#21262d; }
   .result { border-radius:8px; padding:1rem; margin-bottom:1.5rem; white-space:pre-wrap; font-family: SFMono-Regular, Consolas, monospace; font-size:.9rem; }
+  .thinking { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:1rem; margin-bottom:1.5rem; }
+  .thinking summary { cursor:pointer; color:#58a6ff; margin-bottom:.5rem; }
+  .thinking pre { margin:0; white-space:pre-wrap; font-family: SFMono-Regular, Consolas, monospace; font-size:.82rem; color:#c9d1d9; }
   .allowed { background:#0d2818; border:1px solid #238636; }
   .blocked { background:#2d1113; border:1px solid #da3633; }
   .error { background:#2d2311; border:1px solid #9e6a03; }
@@ -234,7 +258,7 @@ PAGE = """
     <textarea name="prompt" placeholder="Ask Piper something...">{{ prompt }}</textarea>
     <div class="examples">
       {% for label, text in examples %}
-        <a href="#" onclick="document.querySelector('textarea[name=prompt]').value={{ text|tojson }}; return false;">{{ label }}</a>
+        <a href="#" data-prompt="{{ text|e }}">{{ label }}</a>
       {% endfor %}
     </div>
     <div class="checkbox-row">
@@ -249,6 +273,14 @@ PAGE = """
 {% if result.message %}{{ result.message }}{% endif %}
 {% if result.response %}{{ result.response }}{% endif %}
     </div>
+    {% if result.thinking %}
+    <div class="thinking">
+      <details open>
+        <summary>Model thinking</summary>
+        <pre>{{ result.thinking }}</pre>
+      </details>
+    </div>
+    {% endif %}
   {% endif %}
 
   <h3 style="color:#8b949e; font-size:.95rem;">Recent activity</h3>
@@ -268,6 +300,19 @@ PAGE = """
     </tr>
     {% endfor %}
   </table>
+  <script>
+    document.addEventListener('click', function (event) {
+      const link = event.target.closest('a[data-prompt]');
+      if (!link) {
+        return;
+      }
+      event.preventDefault();
+      const textarea = document.querySelector('textarea[name="prompt"]');
+      if (textarea) {
+        textarea.value = link.dataset.prompt;
+      }
+    });
+  </script>
 </body>
 </html>
 """
