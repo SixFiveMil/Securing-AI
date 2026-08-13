@@ -12,12 +12,18 @@ services:
   web:
     image: python:3.11-slim
     working_dir: /app
-    command: python lab/scripts/secure_gateway.py
+    # Installs deps on every start so requirements.txt changes (e.g. if
+    # you add a package for a lab variant) take effect without rebuilding
+    # an image. Fine for a classroom sandbox; not meant for production.
+    command: sh -c "pip install --no-cache-dir -r requirements.txt && python lab/scripts/secure_gateway.py"
     ports:
       - "5000:5000"
     volumes:
       - .:/app
     environment:
+      # Points the gateway at the `llm` service by Compose network name,
+      # NOT localhost — the web container's localhost is itself, not the
+      # llm container. secure_gateway.py reads this via os.environ.
       OLLAMA_HOST: http://llm:11434
     depends_on:
       - llm
