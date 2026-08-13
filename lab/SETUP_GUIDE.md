@@ -14,19 +14,22 @@ setup, including the model download, is about 15–20 minutes on a typical broad
 # 1. Start the full stack (one time)
 docker compose up -d
 
-# 2. Pull the base model into the llm container (one time, ~4.7GB)
+# 2. Open the browser app once the services are ready
+#    http://localhost:5000
+
+# 3. Pull the base model into the llm container (one time, ~4.7GB)
 docker compose exec llm ollama pull llama3
 
-# 3. Build the two lab models (one time, after cloning the repo)
+# 4. Build the two lab models (one time, after cloning the repo)
 docker compose exec llm ollama create vulnerable_bot -f /app/lab/modelfiles/vulnerable.txt
 docker compose exec llm ollama create hardened_bot -f /app/lab/modelfiles/hardened.txt
 
-# 4. Attack interactively (Phase 1 / Phase 2)
+# 5. Attack interactively (Phase 1 / Phase 2)
 docker exec -it llm ollama run vulnerable_bot
 docker exec -it llm ollama run hardened_bot
 # (type /bye to exit either chat)
 
-# 5. Run the automated gateway validation (Phase 3)
+# 6. Optional: run the host-side gateway validation script
 pip install ollama
 python lab/scripts/secure_gateway.py
 ```
@@ -61,8 +64,8 @@ No `git`? Click the green **Code** button on the repo page → **Download ZIP** 
 | `README.md` | Architecture overview and quickstart |
 | `lab/modelfiles/vulnerable.txt` | Modelfile — the unhardened "raw" model |
 | `lab/modelfiles/hardened.txt` | Modelfile — the system-prompt-hardened model |
-| `lab/scripts/secure_gateway.py` | Automated Phase 1→2→3 test harness — run this to generate the validation matrix |
-| `lab/scripts/secure_gateway_proxyfilter.py` | Optional — an Open WebUI filter for a live, interactive chat demo (see [Optional](#optional--live-interactive-demo-via-open-webui) below) |
+| `lab/scripts/secure_gateway.py` | Active gateway app and optional host-side test harness for local validation |
+| `lab/scripts/secure_gateway_proxyfilter.py` | Optional Open WebUI filter example; not active by default in this repo's Compose setup |
 
 ---
 
@@ -81,7 +84,9 @@ Verify it's running:
 docker ps
 ```
 
-You should see a container named `llm` with `0.0.0.0:11434->11434/tcp` in the ports column.
+You should see a container named `llm` with `0.0.0.0:11434->11434/tcp` in the ports column and a `web` container exposing `0.0.0.0:5000->5000/tcp`.
+
+Open the web app in a browser at `http://localhost:5000` to use the active lab interface.
 
 > **Already have a container named `llm` from a previous session?** Skip this step — `docker
 > start llm` will bring it back up instead.
@@ -169,16 +174,16 @@ docker exec -it llm ollama run hardened_bot
 
 ## Step 6 — Run the automated gateway validation (Phase 3)
 
-`lab/scripts/secure_gateway.py` runs **outside** the Docker container, on your host machine, and
-talks to the Ollama API over the port you published in Step 2.
+The main lab interface is the browser app in the Docker `web` service at `http://localhost:5000`.
+The host-side script `lab/scripts/secure_gateway.py` is still useful for local testing and debugging, but it is optional in the normal Docker-first workflow.
 
-Install the one Python dependency:
+Install the one Python dependency if you want to use the host-side version:
 
 ```bash
 pip install ollama
 ```
 
-Then run it from inside the `ai-demo` folder:
+Then run it from inside the repo folder:
 
 ```bash
 python lab/scripts/secure_gateway.py
@@ -211,7 +216,7 @@ same matrix format used in the Red Team / Blue Team validation tables.
 
 For a more visual, click-by-click live demo (e.g., during the webinar), `secure_gateway_proxyfilter.py`
 is an Open WebUI **Filter** function with the same ingress/egress logic as `secure_gateway.py`, wired
-into a real chat interface:
+into a real chat interface. This is an optional integration example and is not used by the default Compose stack unless you explicitly configure it in Open WebUI:
 
 - `inlet()` runs before your prompt reaches the model — blocks known jailbreak phrases outright.
 - `outlet()` runs after the model responds — redacts the response if it contains confidential

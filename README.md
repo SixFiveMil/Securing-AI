@@ -4,25 +4,26 @@ AI Hardening Sandbox is a local cybersecurity lab for teaching LLM prompt-inject
 
 ## Architecture
 
-The lab uses three layers:
+The lab runs as a two-service Docker stack defined in `docker-compose.yml`:
 
-1. **Docker Desktop** runs the full stack locally and keeps the environment reproducible for classrooms and workshops.
-2. **Ollama** provides the model runtime on port `11434` and stores model data in the persistent `ollama_storage` volume.
-3. **secure_gateway.py** runs as the Python web service on port `5000`, talks to Ollama through the Compose network, and demonstrates basic ingress and egress filtering.
+1. **`llm`** runs Ollama on port `11434` and stores model data in the persistent `ollama_storage` volume.
+2. **`web`** runs the Python Flask gateway on port `5000`, installs the app dependencies at startup, and reaches Ollama via `OLLAMA_HOST=http://llm:11434` on the Compose network.
 
-The Compose file wires the services together so the gateway can reach Ollama by service name instead of relying on host-specific configuration.
+The gateway logic lives in `lab/scripts/secure_gateway.py`; it is started by the `web` container command in Compose and is not intended to be run manually in the normal Docker-first lab flow.
 
 ## Quickstart
 
-From the repository root:
+From the repository root, start the Docker stack:
 
 ```bash
 docker compose up -d
 ```
 
-Initialize the local models after the stack is running:
+The app is then available in a browser at `http://localhost:5000`. In the Compose stack, the `web` service runs the Flask app automatically; it is not a separate manual step.
 
-The Ollama container is named `llm`, so direct commands like `docker exec -it llm ...` work as well.
+After the services come up, the stack is ready to use. In the current Compose setup, the model pull and the two lab model registrations are part of the local Ollama workflow you can run manually as needed, but they are not required as a separate startup step for the default web app to be reachable.
+
+If you need to create or refresh the models explicitly, use:
 
 ```bash
 docker compose exec llm ollama pull llama3
@@ -31,11 +32,13 @@ docker compose exec llm ollama create vulnerable_bot -f /app/lab/modelfiles/vuln
 docker compose exec llm ollama create hardened_bot -f /app/lab/modelfiles/hardened.txt
 ```
 
-To run the gateway locally on the host instead of through Docker, use:
+Optional: for host-side debugging only, you can run the gateway directly from the repo instead of using the Docker `web` container:
 
 ```bash
 python lab/scripts/secure_gateway.py
 ```
+
+> The Docker path is the active default for the lab. `docker-compose.yml` handles the container startup, and `lab/scripts/secure_gateway_proxyfilter.py` is only an optional Open WebUI filter example and is not enabled by the Compose stack unless you integrate it manually.
 
 ## Classroom Use
 
@@ -49,9 +52,11 @@ These documents are intended to support guided walkthroughs, team exercises, and
 ## Troubleshooting
 
 - If `docker compose up -d` succeeds but Ollama does not answer, confirm Docker Desktop is running and check `docker compose logs llm`.
-- If the gateway cannot reach Ollama, confirm the published port is `11434` and that the `llm` service is healthy enough for the model pull.
+- If the browser gateway cannot reach Ollama, confirm the `llm` service is healthy and that the Docker network is using `OLLAMA_HOST=http://llm:11434` as configured in `docker-compose.yml`.
+- If the host-only gateway script cannot connect, confirm the published port is `11434` and that the Ollama service is listening on the host port before using `http://localhost:11434`.
 - If model creation fails, make sure the Modelfiles were copied into the container before running `ollama create` and that the filenames match exactly.
 - If the Python service exits immediately, confirm you are running it from the repository root so `lab/scripts/secure_gateway.py` can be found.
+- If a model rejects the reasoning option with `does not support thinking`, the gateway will retry without the `think=True` flag automatically; this is expected for some Ollama models.
 
 ## Cleanup
 
