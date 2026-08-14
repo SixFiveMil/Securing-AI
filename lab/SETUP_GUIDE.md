@@ -185,8 +185,9 @@ This is the interface for both lessons — there's no separate CLI workflow to r
 you:
 
 - A dropdown to pick `vulnerable_bot` or `hardened_bot`
-- A checkbox to route the prompt through the security gateway (ingress + egress filters) or send
-  it straight to the model
+- A **Protection mode** dropdown — Phase 1 (direct model, no gateway), Phase 2 (static filters), or
+  Phase 3 (OPA context policy) — replacing the earlier on/off gateway checkbox with an explicit
+  phase selector
 - One-click buttons for the five example attack prompts
 - A live activity log showing every request's verdict (allowed / blocked-ingress / blocked-egress)
 
@@ -238,7 +239,11 @@ For Phase 3, switch the UI mode to **Phase 3 - OPA context policy** and tune:
 - `policies/rules.json` for confidence thresholds and allow/deny context sets
 - `policies/gateway.rego` for decision logic and explainable block reasons
 
-The default context classifier model is `llama3.2:1b`, chosen to stay usable on 8GB classroom machines.
+Save and refresh the browser — the `opa` service runs with `--watch`, so it reloads both files
+automatically, the same "edit, save, refresh" workflow as `filter_rules.py`. No restart needed.
+
+The context classifier model is `llama3.2` (`CONTEXT_MODEL` in Compose) — the same model already
+pulled in Step 3, so Phase 3 requires no additional download.
 
 > **Instructor note:** the default filter rules are deliberately incomplete. In testing,
 > Obfuscation/Encoding is the category most likely to still leak under the out-of-the-box rules,

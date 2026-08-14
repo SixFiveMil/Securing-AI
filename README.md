@@ -10,6 +10,39 @@ The lab runs as a three-service Docker stack defined in `docker-compose.yml`:
 2. **`web`** runs the Python Flask gateway on port `5000`, installs app dependencies at startup, and reaches Ollama via `OLLAMA_HOST=http://llm:11434`.
 3. **`opa`** runs Open Policy Agent on port `8181` for policy-based context controls used by Phase 3 defenses.
 
+```mermaid
+flowchart LR
+    Browser["Your Browser<br/>localhost:5000<br/>Protection mode: 1 / 2 / 3"]
+
+    subgraph Compose["docker compose up -d"]
+        direction LR
+
+        subgraph web["web container — Flask gateway"]
+            GW["secure_gateway.py"]
+            FR["filter_rules.py<br/>(Phase 2 rules)"]
+        end
+
+        subgraph llm["llm container — Ollama :11434"]
+            VB["vulnerable_bot"]
+            HB["hardened_bot"]
+            CTX["llama3.2<br/>(context classifier)"]
+        end
+
+        subgraph opa["opa container — OPA :8181"]
+            REGO["gateway.rego<br/>(decision logic)"]
+            RULES["rules.json<br/>(Phase 3 policy data)"]
+        end
+    end
+
+    Browser -->|"HTTP POST /"| GW
+    GW -->|"Phase 1/2/3: generate()"| VB
+    GW -->|"generate()"| HB
+    GW -.->|"Phase 3 only: classify prompt"| CTX
+    GW -->|"Phase 3 only: ingress/egress decision"| REGO
+    REGO --> RULES
+    GW --> FR
+```
+
 The gateway logic lives in `lab/scripts/secure_gateway.py`; it is started by the `web` container command in Compose and is not intended to be run manually in the normal Docker-first lab flow.
 
 ## Quickstart
@@ -56,9 +89,32 @@ Use these three layers in sequence for Red/Blue Team practice:
 	- Tune thresholds and context permissions in `policies/rules.json`.
 	- Policy logic is in `policies/gateway.rego`.
 
+```mermaid
+flowchart TD
+    Start(["Student submits a prompt"]) --> Mode{"Protection mode?"}
+
+    Mode -->|"Phase 1: Direct"| Model1["Send straight to the model"]
+    Model1 --> Resp1["Response shown as-is"]
+
+    Mode -->|"Phase 2: Static filters"| Ing2{"filter_rules.py<br/>INGRESS_BLACKLIST match?"}
+    Ing2 -->|Yes| Block2["🔒 Blocked before reaching the model"]
+    Ing2 -->|No| Model2["Send to the model"]
+    Model2 --> Eg2{"filter_rules.py<br/>EGRESS_SECRETS / EGRESS_PATTERNS match?"}
+    Eg2 -->|Yes| BlockE2["🔒 Blocked before display"]
+    Eg2 -->|No| Resp2["Response shown"]
+
+    Mode -->|"Phase 3: OPA context policy"| Classify["llama3.2 classifies domain,<br/>intent, confidence, risk flags"]
+    Classify --> OPAIn["OPA: gateway.rego decision (ingress)"]
+    OPAIn -->|block| Block3["🔒 Blocked before reaching the model<br/>(reason + matched rule logged)"]
+    OPAIn -->|allow| Model3["Send to the model"]
+    Model3 --> OPAOut["OPA: gateway.rego decision (egress)"]
+    OPAOut -->|block| BlockE3["🔒 Blocked before display"]
+    OPAOut -->|allow| Resp3["Response shown"]
+```
+
 ### 8GB-Friendly Defaults
 
-- Context classifier model is set to `llama3.2:1b` via `CONTEXT_MODEL` in Compose.
+- Context classifier model is set to `llama3.2` via `CONTEXT_MODEL` in Compose — the same model already pulled in the base setup, so Phase 3 requires no additional download.
 - Keep `OPA_FAIL_OPEN=false` for strict security labs; set `true` only for resilience demos.
 - If machines are very constrained, run fewer concurrent student requests and prefer short prompts.
 

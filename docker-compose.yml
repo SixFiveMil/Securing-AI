@@ -11,7 +11,7 @@ services:
 
   opa:
     image: openpolicyagent/opa:0.68.0
-    command: run --server --addr=0.0.0.0:8181 /policies
+    command: run --server --watch --addr=0.0.0.0:8181 /policies
     ports:
       - "8181:8181"
     volumes:
@@ -36,7 +36,7 @@ services:
       OPA_ENABLED: "true"
       OPA_URL: http://opa:8181/v1/data/gateway/decision
       OPA_FAIL_OPEN: "false"
-      CONTEXT_MODEL: qwen3:1.7b
+      CONTEXT_MODEL: llama3.2
     depends_on:
       - llm
       - opa
