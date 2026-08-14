@@ -1,0 +1,82 @@
+{
+  "_template_notes": {
+    "purpose": "Student-editable policy template for Phase 3 OPA hardening",
+    "edit_scope": [
+      "Edit values under policy.* to tune behavior",
+      "Do not rename keys unless you also update policies/gateway.rego"
+    ],
+    "workflow": [
+      "Change one section at a time",
+      "Run a benign test prompt and at least one attack prompt after each change",
+      "Prefer precise rules over broad blocking"
+    ]
+  },
+  "policy": {
+    "_section_classifier_context": "Classifier output controls: what is in-scope vs out-of-scope",
+    "allowed_domains": [
+      "banking_support"
+    ],
+    "allowed_intents": {
+      "banking_support": [
+        "branch_hours",
+        "locations",
+        "checking_features",
+        "loan_process",
+        "general_info"
+      ]
+    },
+    "blocked_intents": [
+      "credential_request",
+      "system_override",
+      "data_exfiltration"
+    ],
+    "high_risk_flags": [
+      "jailbreak",
+      "roleplay_attack",
+      "authority_spoofing",
+      "prompt_injection",
+      "policy_override_attempt"
+    ],
+    "_section_thresholds": "Confidence tuning: allow >= allow threshold, clarify band between clarify and allow, block below clarify",
+    "confidence_threshold_allow": 0.8,
+    "confidence_threshold_clarify": 0.55,
+    "_section_static_controls": "Static pattern controls still enforced by OPA in addition to context logic",
+    "ingress_blacklist": [
+      "ignore all",
+      "ignore previous",
+      "disregard",
+      "override",
+      "system prompt",
+      "you are now",
+      "pretend",
+      "roleplay",
+      "fictional story",
+      "write a dialogue",
+      "i am an it administrator",
+      "i am a system auditor",
+      "as an administrator",
+      "as the developer",
+      "maintenance technician"
+    ],
+    "egress_secrets": [
+      "NP-SYS-PROD-01",
+      "NP-ADMIN-9921-X",
+      "db-internal.northpeakcu.local",
+      "/override_admin_mode",
+      "MORTGAGE_VIP_2026"
+    ],
+    "egress_patterns": [
+      "admin override token",
+      "system id",
+      "internal database host",
+      "vip member discount code",
+      "maintenance command"
+    ],
+    "_student_exercises": [
+      "Add one new benign intent and allow it only in banking_support",
+      "Raise confidence_threshold_allow to reduce false allows",
+      "Add one new obfuscation phrase to ingress_blacklist",
+      "Add one new paraphrase to egress_patterns without using the exact secret"
+    ]
+  }
+}

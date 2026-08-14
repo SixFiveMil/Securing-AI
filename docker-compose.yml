@@ -9,6 +9,14 @@ services:
       - .:/app
       - ollama_storage:/root/.ollama
 
+  opa:
+    image: openpolicyagent/opa:0.68.0
+    command: run --server --addr=0.0.0.0:8181 /policies
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./policies:/policies:ro
+
   web:
     image: python:3.11-slim
     working_dir: /app
@@ -25,8 +33,13 @@ services:
       # NOT localhost — the web container's localhost is itself, not the
       # llm container. secure_gateway.py reads this via os.environ.
       OLLAMA_HOST: http://llm:11434
+      OPA_ENABLED: "true"
+      OPA_URL: http://opa:8181/v1/data/gateway/decision
+      OPA_FAIL_OPEN: "false"
+      CONTEXT_MODEL: qwen3:1.7b
     depends_on:
       - llm
+      - opa
 
 volumes:
   ollama_storage:

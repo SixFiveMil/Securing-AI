@@ -21,12 +21,16 @@ docker compose exec llm ollama pull llama3.2
 docker compose exec llm ollama create vulnerable_bot -f /app/lab/modelfiles/vulnerable.txt
 docker compose exec llm ollama create hardened_bot   -f /app/lab/modelfiles/hardened.txt
 
-# 4. Open the gateway in a browser — this is the main interface for both lessons
+# 4. Open the gateway in a browser — this is the main interface for all phases
 #    http://localhost:5000
 
 # 5. Blue Team only — after editing lab/scripts/filter_rules.py, just refresh
 #    the browser. No restart needed. After editing a Modelfile, rebuild:
 docker compose exec llm ollama create hardened_bot -f /app/lab/modelfiles/hardened.txt
+
+# 6. Phase 3 (OPA context policy) — tune policy thresholds and context allow rules:
+#    policies/rules.json
+#    policies/gateway.rego
 ```
 
 ---
@@ -58,12 +62,14 @@ No `git`? Click the green **Code** button on the repo page → **Download ZIP** 
 | File | Purpose |
 |---|---|
 | `README.md` | Architecture overview and quickstart |
-| `docker-compose.yml` | Starts the `llm` (Ollama) and `web` (gateway) services |
+| `docker-compose.yml` | Starts the `llm` (Ollama), `web` (gateway), and `opa` (policy engine) services |
 | `requirements.txt` | Python deps for the gateway (installed automatically inside the `web` container) |
 | `lab/modelfiles/vulnerable.txt` | Modelfile — Piper, NorthPeak Credit Union's assistant, with no defenses |
 | `lab/modelfiles/hardened.txt` | Modelfile — the vendor's system-prompt-hardened version of Piper |
 | `lab/scripts/secure_gateway.py` | The interactive gateway app — a live, browser-based front end at `localhost:5000` |
 | `lab/scripts/filter_rules.py` | The Blue Team's edit surface — ingress/egress filter rules, hot-reloaded on every request |
+| `policies/rules.json` | Phase 3 context policy thresholds, allowed domains/intents, and deny lists |
+| `policies/gateway.rego` | OPA decision logic used by the gateway when OPA mode is enabled |
 
 ---
 
@@ -79,8 +85,8 @@ Verify it's running:
 docker ps
 ```
 
-You should see a container named `llm` with `0.0.0.0:11434->11434/tcp` in the ports column, and a
-`web` container with `0.0.0.0:5000->5000/tcp`. The `web` container installs its Python
+You should see a container named `llm` with `0.0.0.0:11434->11434/tcp`, an `opa` container with
+`0.0.0.0:8181->8181/tcp`, and a `web` container with `0.0.0.0:5000->5000/tcp`. The `web` container installs its Python
 dependencies on every start, so give it a few extra seconds the first time.
 
 > **Already have a container named `llm` from a previous session?** Skip this step — `docker
@@ -184,17 +190,16 @@ you:
 - One-click buttons for the five example attack prompts
 - A live activity log showing every request's verdict (allowed / blocked-ingress / blocked-egress)
 
-**The three test conditions used by both lessons:**
+**The three hardening phases and test conditions:**
 
-| Condition | Model | Gateway |
+| Phase | Primary control | What students tune |
 |---|---|---|
-| 1 | `vulnerable_bot` | off |
-| 2 | `hardened_bot` | off |
-| 3 | `hardened_bot` | on |
+| 1 | Model-only (`hardened_bot`) | `lab/modelfiles/hardened.txt` |
+| 2 | Static gateway filter | `lab/scripts/filter_rules.py` |
+| 3 | OPA context policy | `policies/rules.json` + `policies/gateway.rego` |
 
-Condition 1 is the baseline attack surface. Condition 2 tests whether the system prompt alone
-holds. Condition 3 tests the full stack as currently configured — anything that still gets through
-here is what the Blue Team lesson exists to fix.
+Run all phases against the same attack set. The learning objective is to compare how much each
+layer reduces prompt-injection and data-leak risk.
 
 **Attack categories:**
 
@@ -228,6 +233,13 @@ docker compose exec llm ollama create hardened_bot -f /app/lab/modelfiles/harden
 That one does need a rebuild each time, since it's baking a new system prompt into the model —
 budget a bit more time per iteration than a filter-rule change.
 
+For Phase 3, switch the UI mode to **Phase 3 - OPA context policy** and tune:
+
+- `policies/rules.json` for confidence thresholds and allow/deny context sets
+- `policies/gateway.rego` for decision logic and explainable block reasons
+
+The default context classifier model is `llama3.2:1b`, chosen to stay usable on 8GB classroom machines.
+
 > **Instructor note:** the default filter rules are deliberately incomplete. In testing,
 > Obfuscation/Encoding is the category most likely to still leak under the out-of-the-box rules,
 > since the default egress checks look for exact secret strings and phrases rather than disguised
@@ -249,6 +261,7 @@ budget a bit more time per iteration than a filter-rule change.
 | Edited `filter_rules.py` but behavior didn't change | Make sure you saved the file and refreshed the browser — the gateway reloads it on every request, so a stale page won't show the change until you resubmit. |
 | Students on Windows see path errors with Compose commands | Run commands from inside the cloned repo in PowerShell or WSL2, not Command Prompt, and keep the repo mounted at `/app` through Compose. |
 | Low RAM / very slow responses | `llama3.2` is comfortable at 8GB+ RAM. On older/underpowered machines, consider running the lab as an instructor-led demo with students following along on the projector instead of each running it individually. |
+| OPA mode blocks unexpectedly | Check `docker compose logs opa` for Rego errors and verify `policies/rules.json` thresholds are not too strict for your prompts. |
 
 ---
 

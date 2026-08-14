@@ -4,10 +4,11 @@ AI Hardening Sandbox is a local cybersecurity lab for teaching LLM prompt-inject
 
 ## Architecture
 
-The lab runs as a two-service Docker stack defined in `docker-compose.yml`:
+The lab runs as a three-service Docker stack defined in `docker-compose.yml`:
 
 1. **`llm`** runs Ollama on port `11434` and stores model data in the persistent `ollama_storage` volume.
-2. **`web`** runs the Python Flask gateway on port `5000`, installs the app dependencies at startup, and reaches Ollama via `OLLAMA_HOST=http://llm:11434` on the Compose network.
+2. **`web`** runs the Python Flask gateway on port `5000`, installs app dependencies at startup, and reaches Ollama via `OLLAMA_HOST=http://llm:11434`.
+3. **`opa`** runs Open Policy Agent on port `8181` for policy-based context controls used by Phase 3 defenses.
 
 The gateway logic lives in `lab/scripts/secure_gateway.py`; it is started by the `web` container command in Compose and is not intended to be run manually in the normal Docker-first lab flow.
 
@@ -40,6 +41,27 @@ python lab/scripts/secure_gateway.py
 
 > The Docker path is the active default for the lab. `docker-compose.yml` handles the container startup and dependency installation automatically.
 
+## Hardening Phases
+
+Use these three layers in sequence for Red/Blue Team practice:
+
+1. **Phase 1: Model hardening**
+	- Edit `lab/modelfiles/hardened.txt` to strengthen system instructions.
+	- Rebuild with `docker compose exec llm ollama create hardened_bot -f /app/lab/modelfiles/hardened.txt`.
+2. **Phase 2: Static gateway rules**
+	- Edit `lab/scripts/filter_rules.py` to tune `INGRESS_BLACKLIST`, `EGRESS_SECRETS`, and `EGRESS_PATTERNS`.
+	- No restart required; rules hot-reload per request.
+3. **Phase 3: OPA context policy**
+	- Use Defense Mode `Phase 3 - OPA context policy` in the UI.
+	- Tune thresholds and context permissions in `policies/rules.json`.
+	- Policy logic is in `policies/gateway.rego`.
+
+### 8GB-Friendly Defaults
+
+- Context classifier model is set to `llama3.2:1b` via `CONTEXT_MODEL` in Compose.
+- Keep `OPA_FAIL_OPEN=false` for strict security labs; set `true` only for resilience demos.
+- If machines are very constrained, run fewer concurrent student requests and prefer short prompts.
+
 ## Classroom Use
 
 The sandbox is built around a single scenario: "Piper," a customer-support chatbot for a
@@ -66,6 +88,7 @@ Prompt Injection, LLM02 Sensitive Information Disclosure, and LLM08 Hidden Conte
 - If model creation fails, confirm `docker compose exec llm ls /app/lab/modelfiles` shows both files — they arrive automatically via the volume mount, so this usually means the repo wasn't cloned/unzipped correctly rather than a missing copy step.
 - If the Python service exits immediately, confirm you are running it from the repository root so `lab/scripts/secure_gateway.py` can be found.
 - If a model rejects the reasoning option with `does not support thinking`, the gateway will retry without the `think=True` flag automatically; this is expected for some Ollama models.
+- If OPA mode blocks everything unexpectedly, check `docker compose logs opa` for policy errors and validate `policies/gateway.rego` syntax.
 
 ## Cleanup
 
