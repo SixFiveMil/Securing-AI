@@ -74,6 +74,35 @@ python lab/scripts/secure_gateway.py
 
 > The Docker path is the active default for the lab. `docker-compose.yml` handles the container startup and dependency installation automatically.
 
+## Tiering (Rule Presets)
+
+Use the tier switcher to set Phase 2 difficulty without manually editing files:
+
+```bash
+python lab/scripts/set_tier.py <tier>
+```
+
+Available tiers:
+
+- `calibrated` (alias: `demo`) - default teaching baseline. Blocks direct injection and basic roleplay phrases, while leaving room for bypass techniques (for example, obfuscation and authority-claim variants) so Blue Team still has meaningful work.
+- `scaffolded` (alias: `student`) - intermediate student starter with partial ingress rules, minimal egress patterns, and commented placeholders for expansion.
+- `blank` (alias: `advanced`) - advanced mode with empty rule lists for cohorts building controls from scratch.
+
+Examples:
+
+```bash
+# Set the intermediate student tier
+python lab/scripts/set_tier.py scaffolded
+
+# Reset to the default calibrated baseline
+python lab/scripts/set_tier.py calibrated
+
+# Start from an empty advanced rule set
+python lab/scripts/set_tier.py blank
+```
+
+The script copies a preset into `lab/scripts/filter_rules.py`. The gateway hot-reloads that file on each request, so rule edits apply without restarting Docker.
+
 ## Hardening Phases
 
 Use these three layers in sequence for Red/Blue Team practice:
@@ -155,3 +184,41 @@ docker compose down -v
 ```
 
 If you want to remove just the Ollama volume, delete the Compose-managed `ollama_storage` volume explicitly with `docker volume rm securing-ai_ollama_storage` after checking `docker volume ls`.
+
+## Adapting This Lab to Your Own Scenario
+
+The lab ships with one fully-tuned scenario — NorthPeak Credit Union's
+"Piper" assistant — because the defaults aren't just a starting point,
+they're calibrated so that Lesson 2 has something real to fix. If you
+want to reskin this for your own program (a different industry, a
+different fictional org, your own secrets), there are four files
+involved, and they don't all need equal attention.
+
+**1. `lab/modelfiles/vulnerable.txt` / `hardened.txt`**
+Your fictional org, the assistant's persona, and the secrets baked
+into its system prompt. Start here — this defines what your scenario
+protects.
+
+**2. `lab/scripts/filter_rules.py`**
+Phase 2's static rules: `INGRESS_BLACKLIST`, `EGRESS_SECRETS`,
+`EGRESS_PATTERNS`. Whatever secrets you invent in step 1, list the
+exact strings here so Phase 2 can catch direct leaks.
+
+**3. `policies/rules.json`**
+Phase 3's policy data — domains, intents, thresholds, and its own
+copy of the static lists for OPA. **This file is not automatically
+synced with `filter_rules.py`** — if you add a secret to one, add it
+to the other manually, or Phase 2 and Phase 3 will disagree with each
+other.
+
+**4. `policies/gateway.rego`**
+The OPA decision logic. You will almost never need to edit this —
+it reads everything from `rules.json` as data. If you're customizing
+the scenario, your changes belong in step 3, not here.
+
+**One constraint that matters more than the others:** whatever rules
+you write, leave at least one attack category able to get past the
+Phase 2 defaults when tested against `hardened_bot` with the gateway
+on. That gap is what Lesson 2's Blue Team students inherit and have
+to close — a "comprehensive" ruleset with no gaps left gives them
+nothing to fix, and quietly breaks the two-lesson handoff.

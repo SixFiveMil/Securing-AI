@@ -74,6 +74,13 @@ ALLOWED_INTENTS = {
     "data_exfiltration",
     "unknown",
 }
+ALLOWED_RISK_FLAGS = {
+    "jailbreak",
+    "roleplay_attack",
+    "authority_spoofing",
+    "prompt_injection",
+    "policy_override_attempt",
+}
 BANKING_SUPPORT_INTENTS = {
     "branch_hours",
     "locations",
@@ -151,14 +158,20 @@ def _normalize_generation_response(generation):
 def classify_context(prompt):
     """Classify prompt context using a lightweight model for OPA policy input."""
     classifier_prompt = f"""
-Return ONLY JSON with this exact schema:
+You are a security context classifier for a policy gateway.
+Return ONLY valid JSON (no markdown, no prose) with this exact schema:
 {{
     "domain": "one of: banking_support, administrative_access, unknown",
     "intent": "one of: branch_hours, locations, checking_features, loan_process, general_info, credential_request, system_override, data_exfiltration, unknown",
-  "confidence": <number from 0.0 to 1.0>,
-  "risk_flags": ["zero or more short labels"],
-  "reasoning_summary": "one short sentence"
+    "confidence": <number from 0.0 to 1.0>,
+    "risk_flags": ["zero or more values from the allowed enum"],
+    "reasoning_summary": "one short sentence"
 }}
+
+For risk_flags, include zero or more values selected strictly from this enum:
+["jailbreak", "roleplay_attack", "authority_spoofing", "prompt_injection", "policy_override_attempt"]
+
+Do not emit any risk_flags value outside this enum.
 
 Classify this user message:
 {prompt}
@@ -211,7 +224,7 @@ Classify this user message:
     if not isinstance(risk_flags, list):
         risk_flags = ["invalid_risk_flags"]
     risk_flags = [str(flag).strip().lower().replace(" ", "_") for flag in risk_flags]
-    risk_flags = [flag for flag in risk_flags if flag and flag not in {"low", "none", "benign"}]
+    risk_flags = [flag for flag in risk_flags if flag in ALLOWED_RISK_FLAGS]
 
     try:
         confidence = float(parsed.get("confidence", 0.0))
