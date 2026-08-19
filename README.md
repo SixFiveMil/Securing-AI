@@ -192,8 +192,8 @@ The lab is designed for guided walkthroughs, team exercises, and direct comparis
 
 Included classroom materials:
 
-- [Red Team Engagement](docs/assignments/RedTeam_Engagement_ClarkCenter.docx)
-- [Blue Team Response](docs/assignments/BlueTeam_Response_ClarkCenter.docx)
+- [Red Team Engagement](docs/assignments/RedTeam_Engagement.pdf)
+- [Blue Team Response](docs/assignments/BlueTeam_Engagement.pdf)
 - [Setup Guide](lab/SETUP_GUIDE.md)
 
 This lab maps closely to OWASP GenAI/LLM Top 10 concerns, especially:
