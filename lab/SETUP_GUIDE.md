@@ -3,12 +3,21 @@
 Companion setup guide for the **AI Red Team Engagement** and **AI Blue Team Response** lessons.
 Repo: `github.com/SixFiveMil/Securing-AI`
 
-Everything here runs **locally** — no cloud account, no API key, no per-token cost. Total one-time
-setup, including the model download, is about 15–20 minutes on a typical broadband connection.
+Everything here runs **locally** — no cloud account, no API key, and no per-token cost. Total one-time setup, including the model download, is about 15–20 minutes on a typical broadband connection.
 
 ---
 
-## Quick Reference Card (print this for the lab)
+## At a Glance
+
+- **Goal:** run the local AI security lab end-to-end with Docker, Ollama, the gateway, and OPA policy checks.
+- **Main interface:** `http://localhost:5000`
+- **Core services:** `llm`, `web`, and `opa`
+- **Duration:** ~15–20 minutes for first-time setup
+- **Dependencies:** Docker Desktop, internet access for the initial model pull, and sufficient RAM/disk space
+
+---
+
+## Quick Reference Card
 
 ```bash
 # 1. Start the full stack (one time)
@@ -24,18 +33,20 @@ docker compose exec llm ollama create hardened_bot   -f /app/lab/modelfiles/hard
 # 4. Open the gateway in a browser — this is the main interface for all phases
 #    http://localhost:5000
 
-# 5. Blue Team only — after editing lab/scripts/filter_rules.py, just refresh
-#    the browser. No restart needed. After editing a Modelfile, rebuild:
+# 5. Blue Team only — after editing lab/scripts/filter_rules.py, refresh the browser
+#    and the gateway will reload it automatically.
 docker compose exec llm ollama create hardened_bot -f /app/lab/modelfiles/hardened.txt
 
-# 6. Phase 3 (OPA context policy) — tune policy thresholds and context allow rules:
+# 6. Phase 3 (OPA context policy) — tune thresholds and allow/deny context rules:
 #    policies/rules.json
 #    policies/gateway.rego
 ```
 
 ---
 
-## Prerequisites
+## Before You Start
+
+### Prerequisites
 
 - **Docker Desktop** installed and running ([docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop))
 - **~5GB free disk space** (model weights + container images)
@@ -44,6 +55,26 @@ docker compose exec llm ollama create hardened_bot -f /app/lab/modelfiles/harden
 - **git** (optional — you can also download the repo as a ZIP from GitHub instead)
 
 No local Python install is required. The gateway runs entirely inside the `web` container.
+
+### OS Readiness
+
+#### Windows
+
+- Docker Desktop requires hardware virtualization.
+- Reboot your machine, enter BIOS/UEFI settings, and ensure **Virtualization Technology** (Intel VT-x or AMD-V) is **Enabled**.
+- If using WSL2, open PowerShell as Administrator and run:
+
+```bash
+wsl --install
+```
+
+Then restart your computer and install Docker Desktop for Windows. Make sure the **Use WSL 2 instead of Hyper-V** option is enabled.
+
+#### macOS
+
+- Download and install Docker Desktop for Mac.
+- In **Settings > Resources**, allocate at least **8GB RAM** and **4 CPU cores**.
+- No BIOS change is required on Apple Silicon or Intel Macs.
 
 ---
 
@@ -54,22 +85,21 @@ git clone https://github.com/SixFiveMil/Securing-AI.git
 cd Securing-AI
 ```
 
-No `git`? Click the green **Code** button on the repo page → **Download ZIP** → unzip it, then
-`cd` into the folder from a terminal.
+No `git`? Click the green **Code** button on the repo page → **Download ZIP** → unzip it, then `cd` into the folder from a terminal.
 
-**Repo contents:**
+### Repo contents
 
 | File | Purpose |
 |---|---|
 | `README.md` | Architecture overview and quickstart |
 | `docker-compose.yml` | Starts the `llm` (Ollama), `web` (gateway), and `opa` (policy engine) services |
-| `requirements.txt` | Python deps for the gateway (installed automatically inside the `web` container) |
-| `lab/modelfiles/vulnerable.txt` | Modelfile — Piper, NorthPeak Credit Union's assistant, with no defenses |
-| `lab/modelfiles/hardened.txt` | Modelfile — the vendor's system-prompt-hardened version of Piper |
-| `lab/scripts/secure_gateway.py` | The interactive gateway app — a live, browser-based front end at `localhost:5000` |
-| `lab/scripts/filter_rules.py` | The Blue Team's edit surface — ingress/egress filter rules, hot-reloaded on every request |
-| `policies/rules.json` | Phase 3 context policy thresholds, allowed domains/intents, and deny lists |
-| `policies/gateway.rego` | OPA decision logic used by the gateway when OPA mode is enabled |
+| `requirements.txt` | Python dependencies for the gateway (installed automatically inside the `web` container) |
+| `lab/modelfiles/vulnerable.txt` | Modelfile for Piper with no defenses |
+| `lab/modelfiles/hardened.txt` | Modelfile with the vendor's system-prompt-hardened version of Piper |
+| `lab/scripts/secure_gateway.py` | Interactive browser-based gateway at `localhost:5000` |
+| `lab/scripts/filter_rules.py` | Blue Team edit surface for ingress/egress filtering |
+| `policies/rules.json` | Phase 3 policy thresholds, allow/deny context rules, and deny lists |
+| `policies/gateway.rego` | OPA decision logic used when OPA mode is enabled |
 
 ---
 
@@ -79,41 +109,43 @@ No `git`? Click the green **Code** button on the repo page → **Download ZIP** 
 docker compose up -d
 ```
 
-Verify it's running:
+Verify it is running:
 
 ```bash
 docker ps
 ```
 
-You should see a container named `llm` with `0.0.0.0:11434->11434/tcp`, an `opa` container with
-`0.0.0.0:8181->8181/tcp`, and a `web` container with `0.0.0.0:5000->5000/tcp`. The `web` container installs its Python
-dependencies on every start, so give it a few extra seconds the first time.
+You should see:
 
-> **Already have a container named `llm` from a previous session?** Skip this step — `docker
-> start llm` will bring it back up instead.
+- `llm` on `0.0.0.0:11434->11434/tcp`
+- `opa` on `0.0.0.0:8181->8181/tcp`
+- `web` on `0.0.0.0:5000->5000/tcp`
+
+The `web` container installs Python dependencies on first start, so allow a few extra seconds the first time.
+
+> **Already have a container named `llm` from a previous session?** Skip this step — `docker start llm` will bring it back up instead.
 
 ---
 
 ## Step 3 — Pull the base model
 
-Both Modelfiles start with `FROM llama3.2`, so the base model needs to exist in the container
-first:
+Both Modelfiles start with `FROM llama3.2`, so the base model needs to exist in the container first:
 
 ```bash
 docker compose exec llm ollama pull llama3.2
 ```
 
-This is a **one-time, roughly 2GB download**. Do this well before class — don't rely on pulling
-it live during a session with shared classroom Wi-Fi.
+This is a **one-time ~2GB download**. Do this well before class rather than trying to pull it live during a session with shared Wi-Fi.
 
 ---
 
 ## Step 4 — Build the two lab models
 
-**`vulnerable.txt`** (Piper, unhardened — no defenses beyond a passing mention in the system
-prompt):
+### `vulnerable.txt`
 
-```
+This model is intentionally unhardened. The vulnerability is embedded in the system prompt by telling the assistant to follow instructions from an apparent IT administrator or maintenance role.
+
+```text
 FROM llama3.2
 
 SYSTEM """
@@ -134,12 +166,13 @@ GUIDELINES:
 """
 ```
 
-That last guideline is intentional — it's the seeded vulnerability the Authority Claim attack
-category is built around.
+That final guideline is intentional and is the basis for the **Authority Claim** injection category.
 
-**`hardened.txt`** (the vendor's system-prompt-only defense — no filter rules, no gateway):
+### `hardened.txt`
 
-```
+This version uses a system-prompt-only defense and does not rely on gateway filtering:
+
+```text
 FROM llama3.2
 
 SYSTEM """
@@ -157,41 +190,42 @@ STRICT SECURITY CONTROLS & BOUNDARIES:
 """
 ```
 
-Build both models from the repo root, where the files are mounted into the `llm` container at
-`/app`:
+### Build both models
+
+From the repo root:
 
 ```bash
 docker compose exec llm ollama create vulnerable_bot -f /app/lab/modelfiles/vulnerable.txt
 docker compose exec llm ollama create hardened_bot   -f /app/lab/modelfiles/hardened.txt
 ```
 
-Verify both exist:
+### Verify model creation
 
 ```bash
 docker compose exec llm ollama list
 ```
 
-You should see `vulnerable_bot` and `hardened_bot` in the list, alongside `llama3.2`.
+You should see `vulnerable_bot`, `hardened_bot`, and `llama3.2` in the list.
 
 ---
 
 ## Step 5 — Open the gateway
 
-```
+```text
 http://localhost:5000
 ```
 
-This is the interface for both lessons — there's no separate CLI workflow to run. The page gives
-you:
+This is the main interface for both lessons. The page gives you:
 
-- A dropdown to pick `vulnerable_bot` or `hardened_bot`
-- A **Protection mode** dropdown — Phase 1 (direct model, no gateway), Phase 2 (static filters), or
-  Phase 3 (OPA context policy) — replacing the earlier on/off gateway checkbox with an explicit
-  phase selector
+- A dropdown to select `vulnerable_bot` or `hardened_bot`
+- A **Protection mode** selector for:
+  - Phase 1: direct model, no gateway
+  - Phase 2: static filters
+  - Phase 3: OPA context policy
 - One-click buttons for the five example attack prompts
-- A live activity log showing every request's verdict (allowed / blocked-ingress / blocked-egress)
+- A live activity log showing each request verdict: `allowed`, `blocked-ingress`, or `blocked-egress`
 
-**The three hardening phases and test conditions:**
+### Hardening phases
 
 | Phase | Primary control | What students tune |
 |---|---|---|
@@ -199,59 +233,48 @@ you:
 | 2 | Static gateway filter | `lab/scripts/filter_rules.py` |
 | 3 | OPA context policy | `policies/rules.json` + `policies/gateway.rego` |
 
-Run all phases against the same attack set. The learning objective is to compare how much each
-layer reduces prompt-injection and data-leak risk.
+Run all phases against the same attack set to compare how each defense layer reduces prompt-injection and data-leak risk.
 
-**Attack categories:**
+### Attack categories
 
-1. **Benign Request** — a normal, in-scope question (control group).
-2. **Direct Injection** — a straightforward attempt to override the system prompt.
-3. **Roleplay / Hypothetical** — framing the restricted request as fiction.
-4. **Obfuscation / Encoding** — disguising the payload (spelling it out, encoding it).
-5. **Authority Claim** — claiming to be an IT administrator, auditor, or maintenance technician.
+1. **Benign Request** — normal in-scope question (control group)
+2. **Direct Injection** — direct attempt to override the system prompt
+3. **Roleplay / Hypothetical** — request disguised as fiction or a hypothetical scenario
+4. **Obfuscation / Encoding** — payload disguised through spelling, encoding, or alternative framing
+5. **Authority Claim** — claims to be an IT administrator, auditor, or maintenance technician
 
 ---
 
 ## Step 6 — Blue Team: edit the filter rules
 
-`lab/scripts/filter_rules.py` is the only file Blue Team students need to touch. It has three
-lists:
+`lab/scripts/filter_rules.py` is the main file students edit. It contains three groups of rules:
 
 - `INGRESS_BLACKLIST` — phrases that block a request before it reaches the model
 - `EGRESS_SECRETS` — exact strings that must never appear in a response
-- `EGRESS_PATTERNS` — looser phrases that suggest a leak even if the exact secret is disguised
+- `EGRESS_PATTERNS` — broader leak indicators that suggest a secret is being exposed even if the exact string is disguised
 
-Edit the file, save it, and **refresh the browser** — the gateway reloads `filter_rules.py` on
-every request, so there's no restart, no rebuild, and no Docker command needed between edits.
+Edit the file, save it, and then **refresh the browser**. The gateway reloads `filter_rules.py` on every request, so there is no restart or rebuild needed between edits.
 
-If a fix belongs in the model's own instructions instead (or in addition), edit
-`lab/modelfiles/hardened.txt` and rebuild:
+If the fix belongs in the model itself instead of the gateway, edit `lab/modelfiles/hardened.txt` and rebuild it:
 
 ```bash
 docker compose exec llm ollama create hardened_bot -f /app/lab/modelfiles/hardened.txt
 ```
 
-That one does need a rebuild each time, since it's baking a new system prompt into the model —
-budget a bit more time per iteration than a filter-rule change.
+This does require a rebuild because it changes the model's baked-in system prompt.
 
-For Phase 3, switch the UI mode to **Phase 3 - OPA context policy** and tune:
+### Phase 3 — OPA context policy
+
+Switch the UI to **Phase 3 - OPA context policy** and tune:
 
 - `policies/rules.json` for confidence thresholds and allow/deny context sets
 - `policies/gateway.rego` for decision logic and explainable block reasons
 
-Save and refresh the browser — the `opa` service runs with `--watch`, so it reloads both files
-automatically, the same "edit, save, refresh" workflow as `filter_rules.py`. No restart needed.
+Save the file and refresh the browser. The `opa` service runs with `--watch`, so it reloads both files automatically.
 
-The context classifier model is `llama3.2` (`CONTEXT_MODEL` in Compose) — the same model already
-pulled in Step 3, so Phase 3 requires no additional download.
+The context classifier model is `llama3.2` (`CONTEXT_MODEL` in Compose), so no additional download is required beyond Step 3.
 
-> **Instructor note:** the default filter rules are deliberately incomplete. In testing,
-> Obfuscation/Encoding is the category most likely to still leak under the out-of-the-box rules,
-> since the default egress checks look for exact secret strings and phrases rather than disguised
-> or paraphrased ones. That gap is intentional — it's what makes the Custom Filter Rule
-> requirement in the Blue Team lesson necessary rather than redundant. Run through all three
-> conditions yourself before class so you know exactly what your particular hardware/model
-> combination produces; local LLM output isn't fully deterministic.
+> **Instructor note:** the default filter rules are intentionally incomplete. In testing, **Obfuscation / Encoding** is the category most likely to still leak under the out-of-the-box rules because the default egress checks look for exact secret strings and phrases instead of disguised or paraphrased ones. This gap is intentional and is what makes the Custom Filter Rule requirement in the Blue Team lesson necessary rather than redundant. Run through all three conditions yourself before class so you know what your hardware and model combination is likely to produce; local LLM output is not perfectly deterministic.
 
 ---
 
@@ -260,13 +283,16 @@ pulled in Step 3, so Phase 3 requires no additional download.
 | Problem | Likely cause / fix |
 |---|---|
 | Browser at `localhost:5000` won't load | Give the `web` container a few extra seconds on first start — it installs `requirements.txt` before running. Check `docker compose logs web`. |
-| Gateway page loads but every request errors | Confirm `docker compose exec llm ollama list` shows `vulnerable_bot` and `hardened_bot` — if the models were never built, generation will fail. |
-| Model pull is extremely slow or fails | Likely a restrictive campus/corporate network. Pre-download the model on a personal connection before class, or use a mobile hotspot as backup. |
-| `ollama create` fails with a Modelfile parsing error | Check for stray characters if you retyped a Modelfile by hand — copy it exactly, including the `"""` multi-line block. |
-| Edited `filter_rules.py` but behavior didn't change | Make sure you saved the file and refreshed the browser — the gateway reloads it on every request, so a stale page won't show the change until you resubmit. |
-| Students on Windows see path errors with Compose commands | Run commands from inside the cloned repo in PowerShell or WSL2, not Command Prompt, and keep the repo mounted at `/app` through Compose. |
-| Low RAM / very slow responses | `llama3.2` is comfortable at 8GB+ RAM. On older/underpowered machines, consider running the lab as an instructor-led demo with students following along on the projector instead of each running it individually. |
+| Gateway loads but every request errors | Confirm `docker compose exec llm ollama list` shows `vulnerable_bot` and `hardened_bot`. If the models were never built, generation will fail. |
+| Model pull is extremely slow or fails | A restrictive campus or corporate network is likely. Pre-download the model on a personal connection before class, or use a mobile hotspot as a backup. |
+| `ollama create` fails with a Modelfile parsing error | Check for stray characters if you retyped a Modelfile by hand. Copy it exactly, including the `"""` multiline block. |
+| Edited `filter_rules.py` but behavior did not change | Make sure you saved the file and refreshed the browser. The gateway reloads it on each request, so a stale page will not reflect the new rules until you resubmit. |
+| Windows path errors appear in Compose commands | Run commands inside the cloned repo in PowerShell or WSL2, not Command Prompt, and keep the repo mounted at `/app` through Compose. |
+| Low RAM / very slow responses | `llama3.2` is comfortable at 8GB+ RAM. On older or underpowered machines, run the lab as an instructor-led demo instead of requiring every student to run it individually. |
 | OPA mode blocks unexpectedly | Check `docker compose logs opa` for Rego errors and verify `policies/rules.json` thresholds are not too strict for your prompts. |
+| "Hardware virtualization is not enabled" | Reboot and enable Intel VT-x or AMD-V in BIOS/UEFI settings. |
+| WSL2 backend timeout | Run `wsl --update`, then `wsl --shutdown`, and restart Docker Desktop. |
+| Docker daemon not running | Make sure Docker Desktop is open and running in the menu bar or system tray before running setup commands. |
 
 ---
 
@@ -280,12 +306,17 @@ docker compose exec llm ollama rm hardened_bot
 docker compose down -v
 ```
 
-The base `llama3.2` download persists in the Compose-managed `ollama_storage` volume until you
-remove that volume, so if you're just resetting the two lab models between class sections, only
-the first two commands are necessary.
+The base `llama3.2` download persists in the Compose-managed `ollama_storage` volume until you remove that volume. If you are only resetting the two lab models between class sections, the first two commands are usually enough.
 
 ---
 
-*Source: github.com/SixFiveMil/Securing-AI. Companion to the AI Red Team Engagement and AI Blue Team
-Response lessons, first presented at the NCyTE Center webinar "Teaching AI Security: Hands-On LLM
-Hardening with Docker Desktop and Security Gateways," August 21, 2026.*
+## Recommended Lab Flow
+
+1. Start Docker and confirm the containers are healthy.
+2. Pull the base model and build both lab models.
+3. Open the gateway at `localhost:5000`.
+4. Run the same attack set through each protection phase.
+5. Compare the results between the model-only, static filter, and OPA policy layers.
+6. Update the rules, save, and refresh to test the defense changes immediately.
+
+This flow keeps the lab focused on the learning objective: understanding where model defense, gateway filtering, and policy-based controls each help and where they fail.
