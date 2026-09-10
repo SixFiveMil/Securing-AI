@@ -1,5 +1,11 @@
 # AI Hardening Sandbox
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
+[![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-black)](https://ollama.com/)
+[![OPA](https://img.shields.io/badge/Policy-Open%20Policy%20Agent-4B5563)](https://www.openpolicyagent.org/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](requirements.txt)
+
 AI Hardening Sandbox is a hands-on local lab for teaching LLM prompt-injection defenses through Red Team and Blue Team exercises. It combines Docker Desktop, Ollama, and a Python-based security gateway so students can compare vulnerable, hardened, and filtered model behavior in a controlled environment.
 
 ## Overview
@@ -239,3 +245,12 @@ The default scenario is intentionally tuned so Blue Team students have a meaning
 4. `policies/gateway.rego` — decision logic
 
 Keep at least one meaningful bypass gap in the default Phase 2 rules so students still have a real defense task to complete.
+
+---
+
+## Research & Publication
+
+This laboratory supports the AI Security and pedagogy curriculum published on [Code and Cypher](https://codeandcypher.com/):
+- **Pedagogy Overview:** [My Teaching Philosophy: Building Accessible AI Security Education](https://codeandcypher.com/posts/teaching-philosophy-ai-security-overview/)
+- **Hands-on Lab Series:** [Hands-on AI Security: Zero-Cost Local LLM Defense Lab](https://codeandcypher.com/series/hands-on-ai-security/)
+
